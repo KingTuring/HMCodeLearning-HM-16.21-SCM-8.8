@@ -564,7 +564,11 @@ Void TAppEncTop::xInitLibCfg()
 Void TAppEncTop::xCreateLib()
 {
   // Video I/O
+  // TVideoIOYuv 中最主要还是一个成员变量 fstream
+  // 也就是相当于对 fstream 包装了一下
+  // 加了一下描述 fstream 的信息，包括颜色通道数和颜色深度等等，以及一下操作的报警提示信息
   m_cTVideoIOYuvInputFile.open( m_inputFileName,     false, m_inputBitDepth, m_MSBExtendedBitDepth, m_internalBitDepth );  // read  mode
+  // 文件编码时先跳过几帧，也就是前 m_FrameSkip 帧不编码
   m_cTVideoIOYuvInputFile.skipFrames(m_FrameSkip, m_inputFileWidth, m_inputFileHeight, m_InputChromaFormatIDC);
 
   if (!m_reconFileName.empty())
@@ -574,6 +578,9 @@ Void TAppEncTop::xCreateLib()
 
   // Neo Decoder
   m_cTEncTop.create();
+  // m_cTEncTop 中的一些关键类的初始化，
+  // 这些类的初始化需要根据编码器的参数进行
+  // 而这些参数就是从 TAppEncTop 的成员变量传给 TEncTop 的
 }
 
 Void TAppEncTop::xDestroyLib()
@@ -606,6 +613,12 @@ Void TAppEncTop::xInitLib(Bool isFieldCoding)
 Void TAppEncTop::encode()
 {
   fstream bitstreamFile(m_bitstreamFileName.c_str(), fstream::binary | fstream::out);
+  // 打开一个输入输出流文件，对文件执行 二进制 输出 操作
+  
+  // !bitstreamFile = bitstreamFile.operator!();
+  // 也就是 fstream类 的操作符重载
+  // 实际上和bitstreamFile.is_open()功能一致
+  // bitstreamFile.operator!();
   if (!bitstreamFile)
   {
     fprintf(stderr, "\nfailed to open bitstream file `%s' for writing\n", m_bitstreamFileName.c_str());
@@ -617,10 +630,22 @@ Void TAppEncTop::encode()
 
   // initialize internal class & member variables
   xInitLibCfg();
+  // 根据 TAppEncTop 类中成员变量来设置 TEncTop 的成员变量
+  // 也就是 TAppEncTop 是编码器系统中最关键的一个类
+  // 其中 TEncTop 是包含各种编码相关函数的类，里面的关键参数需要根据上层类 TAppEncTop 中的参数来进行设置
+  
   xCreateLib();
+  // 1. 创建原始文件流和重建文件流，也就是初始化两个 TVideoIOYuv 类
+  // 根据 TAppEncTop 设置完 TEncTop 的成员变量后，也就是编码器配置参数从接口类传递给了编码类
+  // 2. 然后 根据这个这些配置和参数 创建编码相关的类，包括 GOP级编码、slice级编码、CU级编码、SAO类、滤波类、率控类
+  
   xInitLib(m_isField);
+  // 关键的类已经创建完了，还需要根据帧还是场进行进一步初始化
+  // 初始化的时候，因为类建立完了，就可以对一些关键的逻辑关系进行赋值
+  // 比如：CU编码类中存放的 slice级编码类指针，用于向上寻找关键参数
 
   printChromaFormat();
+  // 打印颜色信息
 
   // main encoder loop
   Int   iNumEncoded = 0;
@@ -630,6 +655,10 @@ Void TAppEncTop::encode()
   const InputColourSpaceConversion snrCSC = (!m_snrInternalColourSpace) ? m_inputColourSpaceConvert : IPCOLOURSPACE_UNCHANGED;
 
   list<AccessUnit> outputAccessUnits; ///< list of access units to write out.  is populated by the encoding process
+  ///  要写入的接入单元列表
+  ///  在编码过程中进行填充
+  ///  编码码流的基本单元是NALU，而NALU可以是参数集，也可以是一个Slice Segment的编码信息
+  ///  而规定，一张图像的所有 NALU 组成一个AU(Access Unit)
 
   TComPicYuv cPicYuvTrueOrg;
 
@@ -649,6 +678,7 @@ Void TAppEncTop::encode()
   TExt360AppEncTop           ext360(*this, m_cTEncTop.getGOPEncoder()->getExt360Data(), *(m_cTEncTop.getGOPEncoder()), *pcPicYuvOrg);
 #endif
   TEncTemporalFilter temporalFilter;
+  // 基于GOP的时域滤波
   if (m_gopBasedTemporalFilterEnabled)
   {
     temporalFilter.init(m_FrameSkip, m_inputBitDepth, m_MSBExtendedBitDepth, m_internalBitDepth, m_iSourceWidth, m_iSourceHeight,
@@ -692,10 +722,17 @@ Void TAppEncTop::encode()
       flush = true;
       bEos = true;
       m_iFrameRcvd--;
+      // m_iFrameRcvd 是编码器需要从编码器缓存中清出的图片数量
       m_cTEncTop.setFramesToBeEncoded(m_iFrameRcvd);
     }
 
     // call encoding function for one frame
+    // cPicYuvTrueOrg：真实的原始图像
+    // pcPicYuvOrg：原始图像滤波后的图像(可能相当于图像预处理)
+    // bEos:视频尾部，最后一帧 应该是结合flush使用，将缓存帧冲出来
+    // 所以应该是，当flush的时候，可能是编码完成了，所以不编码，直接把重建帧输出
+    // 相当于那个最大延时(所有帧的重建时间和播放时间，中间的时间差，应该就是最大延时，
+    // 也就是最后编码器中剩的帧)
     if ( m_isField )
     {
       m_cTEncTop.encode( bEos, flush ? 0 : pcPicYuvOrg, flush ? 0 : &cPicYuvTrueOrg, ipCSC, snrCSC, m_cListPicYuvRec, outputAccessUnits, iNumEncoded, m_isTopFieldFirst );

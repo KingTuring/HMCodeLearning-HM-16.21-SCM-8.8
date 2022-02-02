@@ -76,6 +76,7 @@ int main(int argc, char* argv[])
       return 1;
     }
   }
+  // 捕捉在命令解析时遇到到的一些问题
   catch (df::program_options_lite::ParseFailure &e)
   {
     std::cerr << "Error parsing option \""<< e.arg <<"\" with argument \""<< e.val <<"\"." << std::endl;

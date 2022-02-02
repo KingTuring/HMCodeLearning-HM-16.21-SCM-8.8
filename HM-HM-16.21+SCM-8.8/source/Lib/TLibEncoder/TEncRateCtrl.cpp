@@ -956,7 +956,11 @@ Double TEncRCPic::getLCUTargetBpp(SliceType eSliceType)
     {
       totalWeight += m_LCUs[i].m_bitWeight;
     }
+    // 从这里可以看出来，如果想要对每个CTU加一个权重信息
+    // 可以利用 m_LCUs[i] 这个成员变量
+    // 这个成员属于 TEncRCPic 帧级率控
     Int realInfluenceLCU = min( g_RCLCUSmoothWindowSize, getLCULeft() );
+    // getLCULeft() 指的是剩余的未编码 LCU 个数
     avgBits = (Int)( m_LCUs[LCUIdx].m_bitWeight - ( totalWeight - m_bitsLeft ) / realInfluenceLCU + 0.5 );
   }
 

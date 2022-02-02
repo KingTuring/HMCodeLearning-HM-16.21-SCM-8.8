@@ -340,16 +340,26 @@ Void TEncTop::encode( Bool flush, TComPicYuv* pcPicYuvOrg, TComPicYuv* pcPicYuvT
       ppsID=getdQPs()[ m_iPOCLast+1 ];
     }
     xGetNewPicBuffer( pcPicCurr, ppsID );
+    // 对编码图像列表进行了一些调整
+    // 并且把要编码的那个图像，用 pcPicCurr 指到了那个图像的位置
+    // 猜测，编码顺序和播放顺序不同，所以要进行调整
     pcPicYuvOrg->copyToPic( pcPicCurr->getPicYuvOrg() );
     pcPicYuvTrueOrg->copyToPic( pcPicCurr->getPicYuvTrueOrg() );
+    // 把图像的一些公用信息拷贝给 pcPicCurr
 
     // compute image characteristics
+    // 这里计算了图像的很多统计特征值，用于之后的自适应QP调整
+    // 所以想要计算一下统计特征用于后续使用，可以在这里进行
     if ( getUseAdaptiveQP() )
     {
       m_cPreanalyzer.xPreanalyze( dynamic_cast<TEncPic*>( pcPicCurr ) );
     }
   }
 
+  // m_iNumPicRcvd：接收到的图像数量
+  // PicRcvd：picture recieved
+  // 后面要进行编码
+  // 1. 如果没有接收到帧，则不进行编码
   if ((m_iNumPicRcvd == 0) || (!flush && (m_iPOCLast != 0) && (m_iNumPicRcvd != m_iGOPSize) && (m_iGOPSize != 0)))
   {
     iNumEncoded = 0;
@@ -359,6 +369,7 @@ Void TEncTop::encode( Bool flush, TComPicYuv* pcPicYuvOrg, TComPicYuv* pcPicYuvT
   if ( m_RCEnableRateControl )
   {
     m_cRateCtrl.initRCGOP( m_iNumPicRcvd );
+    // GOP级别的率控初始化在这里
   }
 
   // compress GOP

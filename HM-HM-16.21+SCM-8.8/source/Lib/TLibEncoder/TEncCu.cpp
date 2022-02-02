@@ -260,6 +260,10 @@ Void TEncCu::compressCtu( TComDataCU* pCtu, UChar* lastPaletteSize, Pel lastPale
   DEBUG_STRING_NEW(sDebug)
 
   xCompressCU( m_ppcBestCU[0], m_ppcTempCU[0], 0 DEBUG_STRING_PASS_INTO(sDebug) );
+  // 每一深度的 CU
+  // m_ppcBestCU 每一深度的最佳CU，m_ppcTempCU 每一深度的暂时 CU
+  // 这两个成员变量是属于 TEncCu 类
+
   DEBUG_STRING_OUTPUT(std::cout, sDebug)
 
 #if ADAPTIVE_QP_SELECTION
@@ -466,6 +470,7 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
   {
     lastIntraBCMv[i] = rpcBestCU->getLastIntraBCMv(i);
   }
+  // 先取出来刚刚使用过的两个 BV
 
   UChar lastPaletteSize[3];
   UInt numValidComp = rpcBestCU->getPic()->getNumberValidComponents();
@@ -498,6 +503,9 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
   const UInt fastDeltaQPCuMaxSize    = Clip3(sps.getMaxCUHeight()>>sps.getLog2DiffMaxMinCodingBlockSize(), sps.getMaxCUHeight(), 32u);
 
   // get Original YUV data from picture
+  // m_ppcOrigYuv 是 TEncCU 级的
+  // copyFromPicYuv() 是从 TEncPic 级的YUV平面上
+  // 根据 CU 的 Rs 地址和 Z 地址确定 要取的像素，并拷贝过来
   m_ppcOrigYuv[uiDepth]->copyFromPicYuv( pcPic->getPicYuvOrg(), rpcBestCU->getCtuRsAddr(), rpcBestCU->getZorderIdxInCtu() );
 
   // variable for Cbf fast mode PU decision
@@ -544,6 +552,7 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
   {
     iMinQP = m_pcRateCtrl->getRCQP();
     iMaxQP = m_pcRateCtrl->getRCQP();
+    // 其实相当于 TEncRateCtrl 是 CU 级别的
   }
 
   // transquant-bypass (TQB) processing loop variable initialisation ---
@@ -552,6 +561,8 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
 
   if ( (pps.getTransquantBypassEnabledFlag()) )
   {
+    // 从下面的分析可以了解到
+    // TQB 用的QP是正常 QP 范围的 MinQP-1
     isAddLowestQP = true; // mark that the first iteration is to cost TQB mode.
     iMinQP = iMinQP - 1;  // increase loop variable range by 1, to allow testing of TQB mode along with other QPs
     if ( m_pcEncCfg->getCUTransquantBypassFlagForceValue() )
@@ -583,6 +594,7 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
   if ( !bBoundary )
   {
       // do inter modes, SKIP and 2Nx2N
+      // 包括 2N*2N的帧间，和 2N*2N 的merge
     for (Int iQP=iMinQP; iQP<=iMaxQP; iQP++)
     {
       const Bool bIsLosslessMode = isAddLowestQP && (iQP == iMinQP);
@@ -671,6 +683,8 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
         rpcTempCU->initEstData( uiDepth, iQP, bIsLosslessMode );
 
         // do inter modes, NxN, 2NxN, and Nx2N
+        // NxN, 2NxN, and Nx2N 指的是 PU 的形状
+        // 所以 NxN 和 2Nx2N 是不一样的
         if ( ( !rpcBestCU->getSlice()->getPPS()->getPpsScreenExtension().getUseIntraBlockCopy() && rpcBestCU->getSlice()->getSliceType() != I_SLICE ) ||
              ( rpcBestCU->getSlice()->getPPS()->getPpsScreenExtension().getUseIntraBlockCopy() && !rpcBestCU->getSlice()->isOnlyCurrentPictureAsReference() ) )
         {
@@ -819,6 +833,7 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
 
         // do normal intra modes
         // speedup for inter frames
+        // 做普通的帧内模式
         Double intraCost = MAX_DOUBLE;
         Double dIntraBcCostPred = 0.0;
         if ( ( !rpcBestCU->getSlice()->getPPS()->getPpsScreenExtension().getUseIntraBlockCopy() && rpcBestCU->getSlice()->getSliceType() == I_SLICE ) ||
@@ -963,6 +978,7 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
         intraCost = MAX_DOUBLE;
 
         // test PCM
+        // PCM 模式
         if(sps.getUsePCM()
           && rpcTempCU->getWidth(0) <= (1<<sps.getPCMLog2MaxSize())
           && rpcTempCU->getWidth(0) >= (1<<sps.getPCMLog2MinSize()) )
@@ -979,12 +995,13 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
         Bool bUse1DSearchFor8x8        = false;
         Bool bSkipIntraBlockCopySearch = false;
 
+        // IBC 的Merge 2Nx2N 模式
         if (rpcTempCU->getSlice()->getPPS()->getPpsScreenExtension().getUseIntraBlockCopy())
         {
           xCheckRDCostIntraBCMerge2Nx2N( rpcBestCU, rpcTempCU );
           rpcTempCU->initEstData( uiDepth, iQP, bIsLosslessMode );
         }
-
+        // IBC 和 PLT
         if( !rpcBestCU->isSkipped(0) ) // avoid very complex intra if it is unlikely
         {
           if (m_pcEncCfg->getUseIntraBlockCopyFastSearch())
@@ -1044,7 +1061,7 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
                       rpcTempCU->initEstData( uiDepth, iQP, bIsLosslessMode );
                       intraCost = std::min( intraCost, adIntraBcCost[SIZE_2NxN] );
                     }
-                }
+                   }
               }
             }
             else
@@ -2726,6 +2743,9 @@ Void TEncCu::xCheckRDCostIntraBCMerge2Nx2N( TComDataCU*& rpcBestCU, TComDataCU*&
   {
     iteration = 2;
   }
+
+  // when noResidual == 0
+  // 
 
   const TComSPS &sps=*(rpcTempCU->getSlice()->getSPS());
   for( UInt noResidual = 0; noResidual < iteration; ++noResidual )

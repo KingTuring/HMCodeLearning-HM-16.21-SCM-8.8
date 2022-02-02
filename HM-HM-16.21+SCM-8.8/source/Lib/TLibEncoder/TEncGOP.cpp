@@ -1254,10 +1254,15 @@ Void TEncGOP::compressGOP( Int iPOCLast, Int iNumPicRcvd, TComList<TComPic*>& rc
   for ( Int iGOPid=0; iGOPid < m_iGopSize; iGOPid++ )
   {
     m_pcCfg->setEncodedFlag(iGOPid, false);
+    // m_GOPList 是一个列表，存放当前GOP中每一帧的重点信息：
+    // 包括是否已编码，slice类型等
   }
 
+  // 编码1个GOP
   for ( Int iGOPid=0; iGOPid < m_iGopSize; iGOPid++ )
   {
+    // 会出于提高编码效率
+    // 对GOP中图像的编码顺序进行一下调整
     if (m_pcCfg->getEfficientFieldIRAPEnabled())
     {
       iGOPid=effFieldIRAPMap.adjustGOPid(iGOPid);
@@ -1784,11 +1789,20 @@ Void TEncGOP::compressGOP( Int iPOCLast, Int iNumPicRcvd, TComList<TComPic*>& rc
       {
         m_pcSliceEncoder->precompressSlice( pcPic );
         m_pcSliceEncoder->compressSlice   ( pcPic, false, false );
+        // compressSlice 的第二个参数，决定是直接编码一个 slice 还是 按照slice segment挨个编码
+        // precompress是以某种方法，为当前slice添加一些候选的QP，然后逐个QP调用compressSlice
+        // 调用完了以后根据RDCost，选择最小的作为最终选择的SliceQP
+        // 预编码的时候，是直接编码整个Slice来测试的，并不是挨个SliceSegment来编码
+        // 两次出现对比：
+        // compressSlice   ( pcPic, true, m_pcCfg->getFastDeltaQp());
+        // compressSlice   ( pcPic, false, false );
 
         const UInt curSliceSegmentEnd = pcSlice->getSliceSegmentCurEndCtuTsAddr();
+        // m_sliceSegmentCurEndCtuTsAddr 存的是CTU的地址(第几个CTU)
         if (curSliceSegmentEnd < numberOfCtusInFrame)
         {
           const Bool bNextSegmentIsDependentSlice=curSliceSegmentEnd<pcSlice->getSliceCurEndCtuTsAddr();
+          // 当前SS是slice中的最后一个，则下一个SS是依赖SS
           const UInt sliceBits=pcSlice->getSliceBits();
           pcPic->allocateNewSlice();
           // prepare for next slice
@@ -1821,6 +1835,7 @@ Void TEncGOP::compressGOP( Int iPOCLast, Int iNumPicRcvd, TComList<TComPic*>& rc
     pcSlice = pcPic->getSlice(0);
 
     // SAO parameter estimation using non-deblocked pixels for CTU bottom and right boundary areas
+    // 去块效应滤波
     if( pcSlice->getSPS()->getUseSAO() && m_pcCfg->getSaoCtuBoundary() )
     {
       m_pcSAO->getPreDBFStatistics(pcPic);

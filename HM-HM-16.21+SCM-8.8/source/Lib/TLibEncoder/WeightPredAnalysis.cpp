@@ -274,8 +274,14 @@ Void WeightPredAnalysis::xCalcACDCParamSlice(TComSlice *const slice)
         }
       }
     }
+    // 同样的遍历每一个像素
+    // 这里有一点可以学习
+    // orgDC += (Int)( pPel[x] );
+    // 利用 pPel[x] 可以保持 pPel 的值不变
 
     const Int64 orgNormDC = ((orgDC+(sample>>1)) / sample);
+    // 说是归一化了一下
+    // 其实就是 orgDC/sample + 1/2
 
     Int64 orgAC = 0;
     {
@@ -289,6 +295,8 @@ Void WeightPredAnalysis::xCalcACDCParamSlice(TComSlice *const slice)
         }
       }
     }
+    // AC 真的用DCT求起来还是太麻烦了
+    // 这里的代替方法是，像素值减去均值然后求和
 
     const Int fixedBitShift = (slice->getSPS()->getSpsRangeExtension().getHighPrecisionOffsetsEnabledFlag())?RExt__PREDICTION_WEIGHTING_ANALYSIS_DC_PRECISION:0;
     weightACDCParam[compID].iDC = (((orgDC<<fixedBitShift)+(sample>>1)) / sample);

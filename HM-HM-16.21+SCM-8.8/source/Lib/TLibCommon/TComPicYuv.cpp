@@ -160,6 +160,8 @@ Void TComPicYuv::create ( const Int picWidth,                 ///< picture width
       for (Int buCol = 0; buCol < numSubBlockPartitions; buCol++)
       {
         m_subCuOffsetInBuffer[chan][(buRow << maxCUDepth) + buCol] = stride  * buRow * minSubBlockHeight + buCol * minSubBlockWidth;
+        // buRow << maxCUDepth = buRow * (1 << maxCUDepth)
+        // 也就相当于 cuRow * numSubBlockInWidth
       }
     }
   }

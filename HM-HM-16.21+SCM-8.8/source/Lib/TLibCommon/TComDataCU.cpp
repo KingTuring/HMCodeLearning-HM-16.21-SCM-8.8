@@ -1728,6 +1728,11 @@ Bool TComDataCU::isFirstAbsZorderIdxInDepth (UInt uiAbsPartIdx, UInt uiDepth) co
 Void TComDataCU::setPartSizeSubParts( PartSize eMode, UInt uiAbsPartIdx, UInt uiDepth )
 {
   assert( sizeof( *m_pePartSize) == 1 );
+  // 将Ctu按照最小单元来看
+  // 将CU的分割方式存放在每个最小单元
+  // 一个CU内的最小分割单元数量就是：
+  // m_pcPic->getNumPartitionsInCtu()>> uiDepth * m_pcPic->getNumPartitionsInCtu()>> uiDepth
+  // m_pcPic->getNumPartitionsInCtu()>> (2*uiDepth)
   memset( m_pePartSize + uiAbsPartIdx, eMode, m_pcPic->getNumPartitionsInCtu() >> ( 2 * uiDepth ) );
 }
 
@@ -2291,11 +2296,14 @@ Void TComDataCU::getInterMergeCandidates( UInt uiAbsPartIdx, UInt uiPUIdx, TComM
     abCandIsInter[ui] = false;
     pcMvFieldNeighbours[ ( ui << 1 )     ].setRefIdx(NOT_VALID);
     pcMvFieldNeighbours[ ( ui << 1 ) + 1 ].setRefIdx(NOT_VALID);
+    // 1个abCandIsInter对应2个pcMvFieldNeighbours
   }
   numValidMergeCand = getSlice()->getMaxNumMergeCand();
   // compute the location of the current PU
   Int xP, yP, nPSW, nPSH;
   this->getPartPosition(uiPUIdx, xP, yP, nPSW, nPSH);
+  // PSW: PU size Width
+  // PSh: PU size Height
 
   Int iCount = 0;
 
@@ -2308,6 +2316,7 @@ Void TComDataCU::getInterMergeCandidates( UInt uiAbsPartIdx, UInt uiPUIdx, TComM
   UInt uiLeftPartIdx = 0;
   const TComDataCU *pcCULeft = getPULeft( uiLeftPartIdx, uiPartIdxLB );
 
+  // A1是否可用
   Bool isAvailableA1 = pcCULeft &&
                        pcCULeft->isDiffMER(xP -1, yP+nPSH-1, xP, yP) &&
                        !( uiPUIdx == 1 && (cCurPS == SIZE_Nx2N || cCurPS == SIZE_nLx2N || cCurPS == SIZE_nRx2N) ) &&

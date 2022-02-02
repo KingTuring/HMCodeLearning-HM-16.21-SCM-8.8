@@ -724,9 +724,11 @@ Void TEncSlice::compressSlice( TComPic* pcPic, const Bool bCompressEntireSlice, 
   UInt   boundingCtuTsAddr;
   TComSlice* const pcSlice            = pcPic->getSlice(getSliceIdx());
   pcSlice->setSliceSegmentBits(0);
+  // 确定 当前编码SS 的范围
   xDetermineStartAndBoundingCtuTsAddr ( startCtuTsAddr, boundingCtuTsAddr, pcPic );
   if (bCompressEntireSlice)
   {
+      // 如果编码整个 Slice 重新定义当前SS范围为整个slice
     boundingCtuTsAddr = pcSlice->getSliceCurEndCtuTsAddr();
     pcSlice->setSliceSegmentCurEndCtuTsAddr(boundingCtuTsAddr);
   }
@@ -737,7 +739,17 @@ Void TEncSlice::compressSlice( TComPic* pcPic, const Bool bCompressEntireSlice, 
   m_uiPicDist       = 0;
 
   m_pcEntropyCoder->setEntropyCoder   ( m_pppcRDSbacCoder[0][CI_CURR_BEST] );
+  // CI_CURR_BEST 最佳模式 的熵编码器
+  // 这个是给出熵编码器的函数指针
+  // 在这里，为什么这么设计的呢，就是
+  // TEncEntropy 类中包含一个 TEncEntropyIf 的指针？
+  // 这里是要实现多态性
+  // 因为可能会用到不同的熵编码方法
+  // 在这里就有指数哥伦布和基于上下文的概率模型两种
+  // 所以利用多态性，首先在 m_pppcRDSbacCoder 中初始化所有可能用的
+  // 然后用之前用相同的语法，就可以实现多态性
   m_pcEntropyCoder->resetEntropy      ( pcSlice );
+  // 初始化各种 SCModel
 
   TEncBinCABAC* pRDSbacCoder = (TEncBinCABAC *) m_pppcRDSbacCoder[0][CI_CURR_BEST]->getEncBinIf();
   pRDSbacCoder->setBinCountingEnableFlag( false );
@@ -755,6 +767,7 @@ Void TEncSlice::compressSlice( TComPic* pcPic, const Bool bCompressEntireSlice, 
   if( pcSlice->getPPS()->getUseWP() || pcSlice->getPPS()->getWPBiPred() )
   {
     xCalcACDCParamSlice(pcSlice);
+    // 计算了两个可以说是部分代表 直流 和 交流 分量的值
   }
 
   const Bool bWp_explicit = (pcSlice->getSliceType()==P_SLICE && pcSlice->getPPS()->getUseWP()) || (pcSlice->getSliceType()==B_SLICE && pcSlice->getPPS()->getWPBiPred());
@@ -770,13 +783,21 @@ Void TEncSlice::compressSlice( TComPic* pcPic, const Bool bCompressEntireSlice, 
     }
 
     xEstimateWPParamSlice( pcSlice, m_pcCfg->getWeightedPredictionMethod() );
+    // 加权预测的方法
+    // 所以这里其实也是可以拓展的，如果有加权预测的想法，完全可以直接加到这里
     pcSlice->initWpScaling(pcSlice->getSPS());
+    // 计算加权预测的参数
 
     // check WP on/off
     xCheckWPEnable( pcSlice );
+    // 这里没看明白 ???
+    // 进来不就是打开了加权预测吗，为什么初始化了以后还要再检查一下
   }
 
 #if ADAPTIVE_QP_SELECTION
+  // 当打开了自适应的 QP 选择，并且当前的SS是独立SS时，才进行自适应QP选择
+  // 所以，如果想要进行 自适应QP调整
+  // 可以参考 宏 ADAPTIVE_QP_SELECTION
   if( m_pcCfg->getUseAdaptQpSelect() && !(pcSlice->getDependentSliceSegmentFlag()))
   {
     // TODO: this won't work with dependent slices: they do not have their own QP. Check fix to mask clause execution with && !(pcSlice->getDependentSliceSegmentFlag())
@@ -795,9 +816,17 @@ Void TEncSlice::compressSlice( TComPic* pcPic, const Bool bCompressEntireSlice, 
   {
     memset(lastPalette[comp], 0, sizeof(Pel) * pcSlice->getSPS()->getSpsScreenExtension().getPaletteMaxPredSize());
   }
+
+  // 从这个循环中也就可以看出来
+  // 调色板的预测，可以是一个序列用一个板子，也可以是一张图像用一个板子
   if ( m_pcCfg->getPalettePredInPPSEnabled() )
   {
     xSetPredFromPPS(lastPalette, lastPaletteSize, pcSlice);
+    // 如果采用调色板预测
+    // 则将预测的调色板进行裁剪(如果颜色数不超过最大数目就不裁剪了)
+    // 然后复制过来
+    // 所以说，调色板是存放在了 PPS 结构体中的
+    // 也就是说一个PPS用一个板 ???
   }
   else if (m_pcCfg->getPalettePredInSPSEnabled())
   {
@@ -836,6 +865,9 @@ Void TEncSlice::compressSlice( TComPic* pcPic, const Bool bCompressEntireSlice, 
   TComSPS *pcSPS = m_pcGOPEncoder->getSPS(pcPPS->getPPSId());
 
   Bool refresh = false;
+  // 其实下面在做的这些事情，还是和调色板的预测相关
+  // 所以先搁置一下，以后再研究到底是怎么进行预测的
+  // ???
   if( !pcSlice->getSliceIdx() )
   {
     if( pcSlice->isOnlyCurrentPictureAsReference() ) m_numIDRs++;
@@ -1098,7 +1130,11 @@ Void TEncSlice::compressSlice( TComPic* pcPic, const Bool bCompressEntireSlice, 
     const UInt ctuRsAddr = pcPic->getPicSym()->getCtuTsToRsAddrMap(ctuTsAddr);
     // initialize CTU encoder
     TComDataCU* pCtu = pcPic->getCtu( ctuRsAddr );
+    // TComPicSym 存放着由当前帧图像的所有 Ctu 数据标志
+    // Sym是symbol，也就是每一个CU的标记，包括划分模式，QP等等
+    // 这些数据按照 Rs 的顺序排列的
     pCtu->initCtu( pcPic, ctuRsAddr );
+    // 当前Ctu初始化一下，主要是各种标志位
 
     // update CABAC state
     const UInt firstCtuRsAddrOfTile = pcPic->getPicSym()->getTComTile(pcPic->getPicSym()->getTileIdxMap(ctuRsAddr))->getFirstCtuRsAddr();
@@ -1159,6 +1195,10 @@ Void TEncSlice::compressSlice( TComPic* pcPic, const Bool bCompressEntireSlice, 
       }
     }
 
+    // 发现在编码每一个CTU之前
+    // 在CTU的结构体中，先存了一下预测的调色板
+    // 可能主要还是因为编码过程中需要遍历，所以调色板也需要遍历
+    // 所以应该在CTU中进行更新
     for (UChar comp = 0; comp < MAX_NUM_COMPONENT; comp++)
     {
       pCtu->setLastPaletteInLcuSizeFinal(comp, lastPaletteSize[comp]);
@@ -1178,6 +1218,9 @@ Void TEncSlice::compressSlice( TComPic* pcPic, const Bool bCompressEntireSlice, 
     ((TEncBinCABAC*)m_pcRDGoOnSbacCoder->getEncBinIf())->setBinCountingEnableFlag(true);
 
     Double oldLambda = m_pcRdCost->getLambda();
+    
+    // LCU 级的率控
+    // 对CTU 的 QP的调整，可以在这里进行
     if ( m_pcCfg->getUseRateCtrl() )
     {
       Int estQP        = pcSlice->getSliceQp();
@@ -1187,6 +1230,13 @@ Void TEncSlice::compressSlice( TComPic* pcPic, const Bool bCompressEntireSlice, 
       if ( ( pcPic->getSlice( 0 )->getSliceType() == I_SLICE && m_pcCfg->getForceIntraQP() ) || !m_pcCfg->getLCULevelRC() )
       {
         estQP = pcSlice->getSliceQp();
+        // 也就是说嘞
+        // 帧级的码率控制是：直接设定 SliceQP
+        // 然后 CTU 直接用 SliceQP
+        // 而 LCU 级的码率控制
+        // 是 求出 estLambda 和 estQP 后，
+        // 赋值给 TEncRC->m_RCQP 和 TComSlice->m_iSliceQpBase
+        // TEncRC->m_RCQP 经过帧级率控后和 SliceQP 值是一样
       }
       else
       {
@@ -1198,6 +1248,7 @@ Void TEncSlice::compressSlice( TComPic* pcPic, const Bool bCompressEntireSlice, 
         else
         {
           estLambda = m_pcRateCtrl->getRCPic()->getLCUEstLambda( bpp );
+          // 限制 CTU 级的QP 在 Slice级的QP 相差2以内
           estQP     = m_pcRateCtrl->getRCPic()->getLCUEstQP    ( estLambda, pcSlice->getSliceQp() );
         }
 
@@ -1218,6 +1269,13 @@ Void TEncSlice::compressSlice( TComPic* pcPic, const Bool bCompressEntireSlice, 
       m_pcRateCtrl->setRCQP( estQP );
 #if ADAPTIVE_QP_SELECTION
       pCtu->getSlice()->setSliceQpBase( estQP );
+      // 好吧，这里发现
+      // m_pcRateCtrl 是在 TEncSlice 中
+      // 而 pCtu->getSlice() 得到的是 TComSlice
+
+      // 不太明白这个 SliceQpBase 是用来干嘛的
+      // 我认为设置了率控的QP就可以了，但是还设置一个sliceQP
+      // ???
 #endif
     }
 
@@ -1812,6 +1870,8 @@ Void TEncSlice::xSetPredFromPPS(Pel lastPalette[MAX_NUM_COMPONENT][MAX_PALETTE_P
   TComSPS *pcSPS = m_pcGOPEncoder->getSPS(pcPPS->getSPSId());
   pcSlice->setSPS(pcSPS);
   pcSlice->setPPS(pcPPS);
+  // PPS 和 SPS 的ID都是唯一的嘛 ？？？
+  // 主要是有疑惑，SPS 会被 PPS 参考，而每一个CVS会对应一个SPS
   UInt num = std::min(pcPPS->getPpsScreenExtension().getNumPalettePred(), pcSPS->getSpsScreenExtension().getPaletteMaxPredSize());
   if( !num )
   {
@@ -1829,12 +1889,15 @@ Void TEncSlice::xSetPredFromPPS(Pel lastPalette[MAX_NUM_COMPONENT][MAX_PALETTE_P
     pcPPS->getPpsScreenExtension().setPalettePredictorBitDepth( ChannelType( ch ), pcSPS->getBitDepth( ChannelType( ch ) ) );
   }
   pcPPS->getPpsScreenExtension().setMonochromePaletteFlag( pcSPS->getChromaFormatIdc() == CHROMA_400 ? true : false );
+  // monochrome 单色
+  // 也就是说需要标记一下，调色板是否为单色
 }
 
 Void TEncSlice::xSetPredFromSPS(Pel lastPalette[MAX_NUM_COMPONENT][MAX_PALETTE_PRED_SIZE], UChar lastPaletteSize[MAX_NUM_COMPONENT], TComSlice *pcSlice)
 {
   TComPPS *pcPPS = m_pcGOPEncoder->getPPS(pcSlice->getPPSId());
   TComSPS *pcSPS = m_pcGOPEncoder->getSPS(pcPPS->getSPSId());
+  // 从 EncGOP 中取出来的 pcPPS 和 pcSPS
   UInt num = std::min(pcSPS->getSpsScreenExtension().getNumPalettePred(), pcSPS->getSpsScreenExtension().getPaletteMaxPredSize());
   if( !num )
   {
@@ -1847,6 +1910,7 @@ Void TEncSlice::xSetPredFromSPS(Pel lastPalette[MAX_NUM_COMPONENT][MAX_PALETTE_P
     memcpy(lastPalette[i], pcSPS->getSpsScreenExtension().getPalettePred(i), num*sizeof(Pel));
   }
   pcSlice->setSPS(pcSPS);
+  // 将 pcSPS 写到 EncSlice
 }
 
 Void TEncSlice::xSetPredDefault(Pel lastPalette[MAX_NUM_COMPONENT][MAX_PALETTE_PRED_SIZE], UChar lastPaletteSize[MAX_NUM_COMPONENT], TComSlice *pcSlice)
