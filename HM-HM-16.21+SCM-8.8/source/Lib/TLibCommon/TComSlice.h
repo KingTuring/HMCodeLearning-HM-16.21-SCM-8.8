@@ -805,6 +805,7 @@ private:
   UInt             m_uiMaxCUWidth;
   UInt             m_uiMaxCUHeight;
   UInt             m_uiMaxTotalCUDepth; ///< Total CU depth, relative to the smallest possible transform block size.
+  // 最大CU深度，和最小变换块是相关的
 
   Window           m_conformanceWindow;
 

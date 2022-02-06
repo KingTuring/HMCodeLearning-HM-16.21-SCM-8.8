@@ -171,6 +171,8 @@ Void TAppDecTop::decode()
     else
     {
       read(nalu);
+      // Payload 转换为 RBSP
+      // 并且读出 NALU 文件头
       if( (m_iMaxTemporalLayer >= 0 && nalu.m_temporalId > m_iMaxTemporalLayer) || !isNaluWithinTargetDecLayerIdSet(&nalu)  )
       {
         bNewPicture = false;

@@ -1787,6 +1787,17 @@ Void TEncGOP::compressGOP( Int iPOCLast, Int iNumPicRcvd, TComList<TComPic*>& rc
 
       for(UInt nextCtuTsAddr = 0; nextCtuTsAddr < numberOfCtusInFrame; )
       {
+        // pcPic 是哪里来的呢？
+        // 编码系统的帧列表，中的元素是 pcPic(TComPic,存的是这一帧图像的控制信息，其中最关键的是CtuArray)
+        // 每一次调用 compressGOP 实际上在做的事情是
+        // 挨个取出 GOP 列表中的 TComPic
+        // 然后调用编码系统的类 TComPic，这个类会通过计算
+        // 从而对 TComPic 进行修改
+        // 总结来讲就是 TComPic 和 TEncPic 两个类需要一起工作
+        // TComPic 更注重存数据和关键的信息
+        // 里面的数据是控制信息以及数据，函数是为了方便读取和修改数据
+        // TEncPic 更注重存编码过程中的一些编码信息，并且编码过程中对 TComPic 中的数据进行修改
+        // 里面的数据是编码过程中要用的辅助信息，里面的函数是编码的函数
         m_pcSliceEncoder->precompressSlice( pcPic );
         m_pcSliceEncoder->compressSlice   ( pcPic, false, false );
         // compressSlice 的第二个参数，决定是直接编码一个 slice 还是 按照slice segment挨个编码
@@ -2004,6 +2015,12 @@ Void TEncGOP::compressGOP( Int iPOCLast, Int iNumPicRcvd, TComList<TComPic*>& rc
       {
         UInt numBinsCoded = 0;
         m_pcSliceEncoder->encodeSlice(pcPic, &(substreamsOut[0]), numBinsCoded);
+        // pcPic 是 class TComPic 
+        // 中有 TComPicSym 
+        // 中有 m_pictureCtuArray 来存放每一个CTU的最佳模式
+        // 所以可以这么说，前面的compressslice是为了 遍历图像的各种模式
+        // 然后将最佳的模式选择 存在 m_pictureCtuArray 里面
+        // 最后在这里根据 m_pictureCtuArray 进行编码
         binCountsInNalUnits+=numBinsCoded;
       }
 

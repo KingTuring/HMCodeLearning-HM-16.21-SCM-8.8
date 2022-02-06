@@ -79,11 +79,19 @@ Void TEncCu::create(UChar uhTotalDepth, UInt uiMaxWidth, UInt uiMaxHeight, Chrom
   UInt uiNumPartitions;
   for( i=0 ; i<m_uhTotalDepth-1 ; i++)
   {
+    // m_uhTotalDepth 是最大CU深度
+    // 也就决定了最小变换块的大小
+
     uiNumPartitions = 1<<( ( m_uhTotalDepth - i - 1 )<<1 );
+    // 划分的时候，其实还是按照最大深度来划分的
+    // 先按照规定的最大深度，将 CTU 划分成最小单元
+    // 然后再说每一层拥有这个最小单元的数量
+
     UInt uiWidth  = uiMaxWidth  >> i;
     UInt uiHeight = uiMaxHeight >> i;
 
     m_ppcBestCU[i] = new TComDataCU; m_ppcBestCU[i]->create( chromaFormat, uiNumPartitions, uiWidth, uiHeight, false, uiMaxWidth >> (m_uhTotalDepth - 1), paletteMaxSize, paletteMaxPredSize );
+    // uiMaxWidth >> (m_uhTotalDepth - 1) 是一个单元的大小
     m_ppcTempCU[i] = new TComDataCU; m_ppcTempCU[i]->create( chromaFormat, uiNumPartitions, uiWidth, uiHeight, false, uiMaxWidth >> (m_uhTotalDepth - 1), paletteMaxSize, paletteMaxPredSize );
 
     m_ppcPredYuvBest[i] = new TComYuv; m_ppcPredYuvBest[i]->create(uiWidth, uiHeight, chromaFormat);
@@ -244,6 +252,9 @@ Void TEncCu::compressCtu( TComDataCU* pCtu, UChar* lastPaletteSize, Pel lastPale
   // initialize CU data
   m_ppcBestCU[0]->initCtu( pCtu->getPic(), pCtu->getCtuRsAddr() );
   m_ppcTempCU[0]->initCtu( pCtu->getPic(), pCtu->getCtuRsAddr() );
+  // 像 pCtu 的话，数据结构是为了存编码控制信息
+  // 但是 m_ppcBestCU 和 m_ppcTempCU 是编码过程类
+  // 是再编码过程中存放暂时数据的
 
   for (UChar comp = 0; comp < (pCtu->getSlice()->getSPS()->getChromaFormatIdc() == CHROMA_400 ? 1 : 3); comp++)
   {
@@ -649,6 +660,10 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
         }
         // SKIP
         xCheckRDCostMerge2Nx2N( rpcBestCU, rpcTempCU DEBUG_STRING_PASS_INTO(sDebug), &earlyDetectionSkipMode, terminateAllFurtherRDO );//by Merge for inter_2Nx2N
+        // 这个函数最后一个参数是 Bool checkSkipOnly，也就是是否只检查 Skip 模式
+        // 所以也就是 terminateAllFurtherRDO = True 相当于 只检查 Skip
+        // Skip 是 merge 的特殊状态嘛
+        // Merge 不编码 MVD，Skip 在此基础上，预测残差也不编码了
         rpcTempCU->initEstData( uiDepth, iQP, bIsLosslessMode );
 
         if(!m_pcEncCfg->getUseEarlySkipDetection() && !terminateAllFurtherRDO)
@@ -692,6 +707,7 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
 
           if(!( (rpcBestCU->getWidth(0)==8) && (rpcBestCU->getHeight(0)==8) ))
           {
+              // 如果 rpcBestCU 是 8*8 的，就不再进行 N*N 的划分了
             if( uiDepth == sps.getLog2DiffMaxMinCodingBlockSize() && doNotBlockPu)
             {
               xCheckRDCostInter( rpcBestCU, rpcTempCU, SIZE_NxN DEBUG_STRING_PASS_INTO(sDebug)   );
@@ -1275,6 +1291,10 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
     bSubBranch = false;
   }
 
+  // 进一步进行分割
+  // 是否进入下一层的分割
+  // 是靠 if 中的条件进行判断的
+  // 这几个条件什么意思 ???
   if( !terminateAllFurtherRDO && bSubBranch && uiDepth < sps.getLog2DiffMaxMinCodingBlockSize() && (!getFastDeltaQp() || uiWidth > fastDeltaQPCuMaxSize || bBoundary))
   {
     PaletteInfoBuffer tempPalettePredictor;
@@ -1295,10 +1315,17 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
       const Bool bIsLosslessMode = false; // False at this level. Next level down may set it to true.
 
       rpcTempCU->initEstData( uiDepth, iQP, bIsLosslessMode );
+      // 在当前层已经得到了一个 rpcBestCU
+      // 所以，初始化一下，然后用来存储下一层的结果
 
       UChar       uhNextDepth         = uiDepth+1;
       TComDataCU* pcSubBestPartCU     = m_ppcBestCU[uhNextDepth];
       TComDataCU* pcSubTempPartCU     = m_ppcTempCU[uhNextDepth];
+      // 首先要明白
+      // m_ppcBestCU 是一个 1 * TotalCuSize 的数组
+      // 每个元素是一个 TComDataCU
+      // 他们唯一不同的就是 iNumPartition 的大小
+      // 在这里呢，在当前深度，分成下一深度的4个CU，挨个遍历，如果更好的话，就写入
       DEBUG_STRING_NEW(sTempDebug)
 
       if( iMinQP != iMaxQP && iQP != iMinQP )
@@ -1331,6 +1358,7 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
           }
         }
 
+        // 划分后，尝试编码四个子CU
         if( ( pcSubBestPartCU->getCUPelX() < sps.getPicWidthInLumaSamples() ) && ( pcSubBestPartCU->getCUPelY() < sps.getPicHeightInLumaSamples() ) )
         {
           if ( 0 == uiPartUnitIdx) //initialize RD with previous depth buffer
@@ -1381,6 +1409,8 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
           }
 
           rpcTempCU->copyPartFrom( pcSubBestPartCU, uiPartUnitIdx, uhNextDepth );         // Keep best part data to current temporary data.
+          // 要能理解是如何将子块的最佳模式拷贝到这一层级
+          // 这个过程如果理解了，应该就可以理解如何看明白RDO后得到的最佳模式信息了
           xCopyYuv2Tmp( pcSubBestPartCU->getTotalNumPart()*uiPartUnitIdx, uhNextDepth );
           if ( m_pcEncCfg->getLumaLevelToDeltaQPMapping().isEnabled() && pps.getMaxCuDQPDepth() >= 1 )
           {
@@ -1393,6 +1423,7 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
           rpcTempCU->copyPartFrom( pcSubBestPartCU, uiPartUnitIdx, uhNextDepth );
         }
       }
+      // 下一层的当前结果存在了 rpcTempCU 里面了
 
       m_pcRDGoOnSbacCoder->load(m_pppcRDSbacCoder[uhNextDepth][CI_NEXT_BEST]);
       if( !bBoundary )
@@ -1476,13 +1507,15 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
       }
 
       xCheckBestMode( rpcBestCU, rpcTempCU, uiDepth DEBUG_STRING_PASS_INTO(sDebug) DEBUG_STRING_PASS_INTO(sTempDebug) DEBUG_STRING_PASS_INTO(false) ); // RD compare current larger prediction
-                                                                                                                                                       // with sub partitioned prediction.
+      // 搭配 rpcTempCU->copyPartFrom 使用       
+      // 当前这一层只需要和下一层划分对比一下即可                                                                                                                                  // with sub partitioned prediction.
     }
   }
 
   DEBUG_STRING_APPEND(sDebug_, sDebug);
 
-  rpcBestCU->copyToPic(uiDepth);                                                     // Copy Best data to Picture for next partition prediction.
+  rpcBestCU->copyToPic(uiDepth);                 // Copy Best data to Picture for next partition prediction.
+  // 是在这里，把Ctu的最佳数据写到了 Pic 的 CtuArray 里面的
 
   xCopyYuv2Pic( rpcBestCU->getPic(), rpcBestCU->getCtuRsAddr(), rpcBestCU->getZorderIdxInCtu(), uiDepth, uiDepth, rpcBestCU );   // Copy Yuv data to picture Yuv
   for (UInt ch = 0; ch < numValidComp; ch++)
@@ -1809,12 +1842,21 @@ Void TEncCu::xCheckRDCostMerge2Nx2N( TComDataCU*& rpcBestCU, TComDataCU*& rpcTem
   assert( rpcTempCU->getSlice()->getSliceType() != I_SLICE );
   if(getFastDeltaQp())
   {
+      // fast delta qp 到底是在干什么 ???
+      // 为什么在这个模式下，不检查 merge 模式
     return;   // never check merge in fast deltaqp mode
   }
   TComMvField  cMvFieldNeighbours[2 * MRG_MAX_NUM_CANDS]; // double length for mv of both lists
+  // 因为可能是 B 帧，所以候选 MV 列表要包含两个方向的参考帧
   UChar uhInterDirNeighbours[MRG_MAX_NUM_CANDS];
   Int numValidMergeCand = 0;
+  // 可用的 merge 数量，时域最多选4个
   const Bool bTransquantBypassFlag = rpcTempCU->getCUTransquantBypass(0);
+  // 这个是什么情况呢？
+  // 我的猜测哦
+  // 因为HEVC也可以用于无损编码
+  // 无损编码依旧会使用这些先进的预测技术，仅仅是不再进行变换量化过程了
+  // 预测之后，直接对残差进行熵编码
 
   for( UInt ui = 0; ui < rpcTempCU->getSlice()->getMaxNumMergeCand(); ++ui )
   {
@@ -1847,6 +1889,11 @@ Void TEncCu::xCheckRDCostMerge2Nx2N( TComDataCU*& rpcBestCU, TComDataCU*& rpcTem
 
   UInt iteration;
   UInt iterationBegin = checkSkipOnly ? 1 : 0;
+  // 这里说明 迭代 可以有2遍
+  // 无损编码只迭代一遍
+  // 第一遍是 merge
+  // 第二遍是 skip
+  // 如果只检查 skip，直接进入第二遍
   if ( rpcTempCU->isLosslessCoded(0))
   {
     iteration = 1;
@@ -1970,6 +2017,8 @@ Void TEncCu::xCheckRDCostMerge2Nx2N( TComDataCU*& rpcBestCU, TComDataCU*& rpcTem
           xCheckDQP( rpcTempCU );
           TComDataCU *rpcTempCUPre = rpcTempCU;
 
+          // 找到了 rpcBestCU 和 rpcTempCU 的交互位置了
+          // 每次检测完一种编码模式，就进行一下 xCheckBestMode 
           xCheckBestMode(rpcBestCU, rpcTempCU, uhDepth DEBUG_STRING_PASS_INTO(bestStr) DEBUG_STRING_PASS_INTO(tmpStr));
 
           Bool bParentUseCSC = ( rpcBestCU->getSlice()->getPPS()->getPpsScreenExtension().getUseColourTrans()
@@ -2395,6 +2444,8 @@ Void TEncCu::xCheckIntraPCM( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU )
  */
 Void TEncCu::xCheckBestMode( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, UInt uiDepth DEBUG_STRING_FN_DECLARE(sParent) DEBUG_STRING_FN_DECLARE(sTest) DEBUG_STRING_PASS_INTO(Bool bAddSizeInfo) )
 {
+    // 从这里看呀，好像对 rpcTempCU 和 rpcBestCU 理解更深刻了点
+    // 可能一个存的是当前这层的最佳划分，一个存的是下一层的最佳划分
   if( rpcTempCU->getTotalCost() < rpcBestCU->getTotalCost() )
   {
     TComYuv* pcYuv;

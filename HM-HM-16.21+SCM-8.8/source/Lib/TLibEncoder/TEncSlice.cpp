@@ -756,6 +756,9 @@ Void TEncSlice::compressSlice( TComPic* pcPic, const Bool bCompressEntireSlice, 
   pRDSbacCoder->setBinsCoded( 0 );
 
   TComBitCounter  tempBitCounter;
+  // TComBitCounter 和 TComOutputBitstream 都是 TComBitIf 的子类
+  // 只不过 TComBitCounter 只记录过程中数据量的变化，并没有真的开辟内存区进行编码
+  // 而，TComOutputBitstream是真的在边记录数据量的变化，边把数据写到了缓存区里
   const UInt      frameWidthInCtus = pcPic->getPicSym()->getFrameWidthInCtus();
   
   m_pcCuEncoder->setFastDeltaQp(bFastDeltaQP);
@@ -1281,6 +1284,8 @@ Void TEncSlice::compressSlice( TComPic* pcPic, const Bool bCompressEntireSlice, 
 
     // run CTU trial encoder
     m_pcCuEncoder->compressCtu( pCtu, lastPaletteSize, lastPalette );
+    // 这个函数执行完后，会把最佳的模式、划分等等控制信息
+    // 存在成员变量 m_ppcBestCU[0] 里
 
 
     // All CTU decisions have now been made. Restore entropy coder to an initial stage, ready to make a true encode,
@@ -1548,6 +1553,7 @@ Void TEncSlice::encodeSlice   ( TComPic* pcPic, TComOutputBitstream* pcSubstream
     TComDataCU* pCtu = pcPic->getCtu( ctuRsAddr );
 
     m_pcEntropyCoder->setBitstream( &pcSubstreams[uiSubStrm] );
+    void* addr = &pcSubstreams[uiSubStrm];
 
     // set up CABAC contexts' state for this CTU
     if (ctuRsAddr == firstCtuRsAddrOfTile)
