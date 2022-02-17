@@ -680,6 +680,115 @@ Void TEncSlice::precompressSlice( TComPic* pcPic )
   setUpLambda(pcSlice, m_vdRdPicLambda[uiQpIdxBest], m_viRdPicQp    [uiQpIdxBest]);
 }
 
+// dj-fixed
+template <class T>
+static void Zs2Ts(T* a, TComPic* pcPic) {
+    T tmp[16 * 16];
+    //g_auiZscanToRaster[];
+    for (int i = 0; i < 16; ++i) {
+        for (int j = 0; j < 16; ++j) {
+            tmp[g_auiZscanToRaster[i + 16 * j]] = a[i + 16 * j];
+        }
+    }
+};
+
+enum mode_predict
+{
+    skip = 1,
+    intra = 2,
+    inter = 3,
+    ibc = 4,
+    plt = 5
+};
+
+static void IBC_decision(TComDataCU* tmpCU, SChar* predic_mode) {
+    //g_auiZscanToRaster[];
+    for (int i = 0; i < 16; ++i) {
+        for (int j = 0; j < 16; ++j) {
+            SChar* tmp = &predic_mode[g_auiZscanToRaster[j + i * 16]];
+            if (tmpCU->isIntraBC(j + i * 16)) {
+                tmp[0] = ibc;
+            }
+            else if (tmpCU->getPaletteModeFlag(j + i * 16)) {
+                tmp[0] = plt;
+            }
+            else if (tmpCU->isIntra(j + i * 16)) {
+                tmp[0] = intra;
+            }
+            else if(tmpCU->isInter(j + i * 16)){
+                tmp[0] = inter;
+            }
+            else if (tmpCU->isSkipped(j + i * 16)) {
+                tmp[0] = skip;
+            }
+        }
+    }
+}
+
+static void CopyCTU2Pic(SChar* CTU, SChar* Pic, int hei, int wid, int stride) {
+    SChar* tmp = Pic + hei * stride + wid;
+    for (int i = 0; i < 16; ++i) {
+        SChar* tmp1 = tmp + i * stride;
+        for (int j = 0; j < 16; ++j) {
+            tmp1[j] = CTU[i * 16 + j];
+        }
+    }
+}
+
+static void ShowPicMode(SChar* Pic, int CTU_row_num, int CTU_col_num, TComPicYuv& Yuv) {
+    for (int i = 0; i < CTU_row_num * 16 ; ++i) {
+        for (int j = 0; j < CTU_col_num * 16; ++j) {
+            // cout << (int)Pic[i * CTU_col_num * 16 + j] << " ";
+        }
+        // cout <<  endl;
+    }
+}
+
+// dj-fixed
+/**
+* SCC RC precompress
+* 
+* \param pcPic    picture class
+*/
+
+Void TEncSlice::SCCprecompressSlice(TComPic* pcPic)
+{
+
+    TComSlice* pcSlice = pcPic->getSlice(getSliceIdx());
+    // try compress
+
+    TComPicYuv *org = pcPic->getPicYuvOrg();
+    int hei = org->getHeight(COMPONENT_Y);
+    int wid = org->getWidth(COMPONENT_Y);
+    int stride = org->getStride(COMPONENT_Y);
+    int margin_x = org->getMarginX(COMPONENT_Y);
+    int margin_y = org->getMarginY(COMPONENT_Y);
+
+    compressSlice(pcPic, true, false);
+    
+    int num_CTU_in_frame = pcPic->getPicSym()->getNumberOfCtusInFrame();
+    int CTU_row = pcPic->getPicSym()->getFrameHeightInCtus();
+    int CTU_col = pcPic->getPicSym()->getFrameWidthInCtus();
+    int num_partations = pcPic->getPicSym()->getNumPartitionsInCtu();
+    int partation_in_row = pcPic->getPicSym()->getNumPartInCtuHeight();
+    //int 
+    SChar* predic_mode = new SChar[16 * 16];
+    SChar* CTU_mode = new SChar[CTU_col * CTU_row * partation_in_row * partation_in_row];
+    for (int i = 0; i < num_CTU_in_frame; ++i) {
+        TComDataCU* tmpCU = pcPic->getPicSym()->getCtu(i);
+        //UChar* dep = tmpCU->getDepth();
+        //Zs2Ts<UChar>(dep, pcPic);
+        IBC_decision(tmpCU, predic_mode);
+        int CTU_x = i % CTU_col;
+        int CTU_y = i / CTU_col;
+        CopyCTU2Pic(predic_mode, CTU_mode, CTU_y * partation_in_row, CTU_x * partation_in_row, CTU_col * partation_in_row);
+    }
+    TComPicYuv tmp_yuv;
+    pcPic->getPicYuvOrg()->copyToPic(&tmp_yuv);
+    ShowPicMode(CTU_mode, CTU_row, CTU_col, tmp_yuv);
+    tmp_yuv.dump("predmode.yuv", pcPic->getPicSym()->getSPS().getBitDepths());
+}
+
 Void TEncSlice::calCostSliceI(TComPic* pcPic) // TODO: this only analyses the first slice segment. What about the others?
 {
   Double            iSumHadSlice      = 0;

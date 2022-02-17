@@ -132,6 +132,10 @@ public:
   Void    calCostSliceI       ( TComPic* pcPic );
   Void    encodeSlice         ( TComPic* pcPic, TComOutputBitstream* pcSubstreams, UInt &numBinsCoded );
 
+  // dj fixed
+  //SCC RC precompress
+  Void    SCCprecompressSlice(TComPic* pcPic);
+
   // misc. functions
   Void    setSearchRange      ( TComSlice* pcSlice  );                                  ///< set ME range adaptively
 

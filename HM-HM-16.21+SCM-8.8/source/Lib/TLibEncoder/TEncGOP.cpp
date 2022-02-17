@@ -1799,6 +1799,10 @@ Void TEncGOP::compressGOP( Int iPOCLast, Int iNumPicRcvd, TComList<TComPic*>& rc
         // TEncPic 更注重存编码过程中的一些编码信息，并且编码过程中对 TComPic 中的数据进行修改
         // 里面的数据是编码过程中要用的辅助信息，里面的函数是编码的函数
         m_pcSliceEncoder->precompressSlice( pcPic );
+        
+        // dj fixed
+        m_pcSliceEncoder->SCCprecompressSlice(pcPic);
+
         m_pcSliceEncoder->compressSlice   ( pcPic, false, false );
         // compressSlice 的第二个参数，决定是直接编码一个 slice 还是 按照slice segment挨个编码
         // precompress是以某种方法，为当前slice添加一些候选的QP，然后逐个QP调用compressSlice
