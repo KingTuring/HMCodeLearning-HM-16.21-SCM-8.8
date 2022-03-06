@@ -1271,6 +1271,8 @@ Void TEncTop::xInitRPS(TComSPS &sps, Bool isFieldCoding)
 Void TEncTop::selectReferencePictureSet(TComSlice* slice, Int POCCurr, Int GOPid )
 {
   slice->setRPSidx(GOPid);
+  // GOP中的 ID
+  // question：和POC不一样吗？
 
   for(Int extraNum=m_iGOPSize; extraNum<m_extraRPSs+m_iGOPSize; extraNum++)
   {

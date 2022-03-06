@@ -819,9 +819,12 @@ Void TComSlice::decodingRefreshMarking(Int& pocCRA, Bool& bRefreshPending, TComL
     while (iterPic != rcListPic.end())
     {
       rpcPic = *(iterPic);
+      // 只有IDR的时候还额外设置了这个 sliceIDX
+      // 为什么 CRA 和 BLA 不用设置呢
       rpcPic->setCurrSliceIdx(0);
       if (rpcPic->getPOC() != pocCurr)
       {
+        // 参考帧列表中，除了当前帧，都设置为 不能参考
         rpcPic->getSlice(0)->setReferenced(false);
         rpcPic->getHashMap()->clearAll();
       }
@@ -848,6 +851,8 @@ Void TComSlice::decodingRefreshMarking(Int& pocCRA, Bool& bRefreshPending, TComL
         while (iterPic != rcListPic.end())
         {
           rpcPic = *(iterPic);
+          // 所以这个相对于IDR来说，只是多了个条件 rpcPic->getPOC() != m_iLastIDR
+          // 就是 当前帧 和 上一个IDR帧 可以作为参考帧
           if (rpcPic->getPOC() != pocCurr && rpcPic->getPOC() != m_iLastIDR)
           {
             rpcPic->getSlice(0)->setReferenced(false);
@@ -866,6 +871,9 @@ Void TComSlice::decodingRefreshMarking(Int& pocCRA, Bool& bRefreshPending, TComL
         while (iterPic != rcListPic.end())
         {
           rpcPic = *(iterPic);
+          // 这个相对于IDR来说，只是多了个条件 rpcPic->getPOC() != pocCRA
+          // 就是 当前帧 和 pocCRA帧 可以作为参考帧
+          // pocCRA帧 在当前帧之前
           if (rpcPic->getPOC() != pocCurr && rpcPic->getPOC() != pocCRA)
           {
             rpcPic->getSlice(0)->setReferenced(false);

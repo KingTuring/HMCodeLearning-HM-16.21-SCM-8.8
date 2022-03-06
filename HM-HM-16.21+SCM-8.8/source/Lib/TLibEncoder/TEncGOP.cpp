@@ -1304,6 +1304,7 @@ Void TEncGOP::compressGOP( Int iPOCLast, Int iNumPicRcvd, TComList<TComPic*>& rc
       continue;
     }
 
+    // 如果 getNalUnitType 的类型是 IDR
     if( getNalUnitType(pocCurr, m_iLastIDR, isField) == NAL_UNIT_CODED_SLICE_IDR_W_RADL || getNalUnitType(pocCurr, m_iLastIDR, isField) == NAL_UNIT_CODED_SLICE_IDR_N_LP )
     {
       m_iLastIDR = pocCurr;
@@ -1364,6 +1365,7 @@ Void TEncGOP::compressGOP( Int iPOCLast, Int iNumPicRcvd, TComList<TComPic*>& rc
       }
     }
 
+    // IRAP(Intra Random Access Point) ——随机接入点
     if (m_pcCfg->getEfficientFieldIRAPEnabled())
     {
       if ( pcSlice->getNalUnitType() == NAL_UNIT_CODED_SLICE_BLA_W_LP
@@ -1379,9 +1381,16 @@ Void TEncGOP::compressGOP( Int iPOCLast, Int iNumPicRcvd, TComList<TComPic*>& rc
       pcSlice->setAssociatedIRAPType(m_associatedIRAPType);
       pcSlice->setAssociatedIRAPPOC(m_associatedIRAPPOC);
     }
+
+    // 清空缓存帧列表
     // Do decoding refresh marking if any
     pcSlice->decodingRefreshMarking(m_pocCRA, m_bRefreshPending, rcListPic, m_pcCfg->getEfficientFieldIRAPEnabled());
+    
+    // 待阅读 selectReferencePictureSet
     m_pcEncTop->selectReferencePictureSet(pcSlice, pocCurr, iGOPid);
+    // 有意思啊
+    // 如果 m_bEfficientFieldIRAPEnabled 使能了，就在 设置参考帧列表之前，设置随机接入点
+    // 如果 m_bEfficientFieldIRAPEnabled 没有使能，就在 设置参考帧列表之后，设置随机接入点
     if (!m_pcCfg->getEfficientFieldIRAPEnabled())
     {
       if ( pcSlice->getNalUnitType() == NAL_UNIT_CODED_SLICE_BLA_W_LP
@@ -1398,6 +1407,7 @@ Void TEncGOP::compressGOP( Int iPOCLast, Int iNumPicRcvd, TComList<TComPic*>& rc
       pcSlice->setAssociatedIRAPPOC(m_associatedIRAPPOC);
     }
 
+    // 待阅读 createExplicitReferencePictureSetFromReference
     if ((pcSlice->checkThatAllRefPicsAreAvailable(rcListPic, pcSlice->getRPS(), false, m_iLastRecoveryPicPOC, m_pcCfg->getDecodingRefreshType() == 3) != 0) || (pcSlice->isIRAP()) 
       || (m_pcCfg->getEfficientFieldIRAPEnabled() && isField && pcSlice->getAssociatedIRAPType() >= NAL_UNIT_CODED_SLICE_BLA_W_LP && pcSlice->getAssociatedIRAPType() <= NAL_UNIT_CODED_SLICE_CRA && pcSlice->getAssociatedIRAPPOC() == pcSlice->getPOC()+1)
       )
@@ -1405,6 +1415,7 @@ Void TEncGOP::compressGOP( Int iPOCLast, Int iNumPicRcvd, TComList<TComPic*>& rc
       pcSlice->createExplicitReferencePictureSetFromReference(rcListPic, pcSlice->getRPS(), pcSlice->isIRAP(), m_iLastRecoveryPicPOC, m_pcCfg->getDecodingRefreshType() == 3, m_pcCfg->getEfficientFieldIRAPEnabled());
     }
 
+    // 待阅读 applyReferencePictureSet
     pcSlice->applyReferencePictureSet(rcListPic, pcSlice->getRPS());
 
     if(pcSlice->getTLayer() > 0 
@@ -1470,6 +1481,8 @@ Void TEncGOP::compressGOP( Int iPOCLast, Int iNumPicRcvd, TComList<TComPic*>& rc
         }
       }
     }
+    
+    // RPS reference picture set：参考图像集合
     arrangeLongtermPicturesInRPS(pcSlice, rcListPic);
     TComRefPicListModification* refPicListModification = pcSlice->getRefPicListModification();
     refPicListModification->setRefPicListModificationFlagL0(0);
@@ -1493,6 +1506,8 @@ Void TEncGOP::compressGOP( Int iPOCLast, Int iNumPicRcvd, TComList<TComPic*>& rc
       pcSlice->setCurPicLongTerm( pcPic );
       pcPic->setIsLongTerm( true );
     }
+
+    // 待阅读 setRefPicList
     //  Set reference list
     pcSlice->setRefPicList ( rcListPic );
 
@@ -1571,8 +1586,10 @@ Void TEncGOP::compressGOP( Int iPOCLast, Int iNumPicRcvd, TComList<TComPic*>& rc
 #endif
 
     //-------------------------------------------------------------
+    // 待阅读 setRefPOCList
     pcSlice->setRefPOCList();
 
+    // 待阅读 setList1IdxToList0Idx
     pcSlice->setList1IdxToList0Idx();
 
     if (m_pcEncTop->getTMVPModeId() == 2)
@@ -1801,7 +1818,7 @@ Void TEncGOP::compressGOP( Int iPOCLast, Int iNumPicRcvd, TComList<TComPic*>& rc
         m_pcSliceEncoder->precompressSlice( pcPic );
         
         // dj fixed
-        m_pcSliceEncoder->SCCprecompressSlice(pcPic);
+        //m_pcSliceEncoder->SCCprecompressSlice(pcPic);
 
         m_pcSliceEncoder->compressSlice   ( pcPic, false, false );
         // compressSlice 的第二个参数，决定是直接编码一个 slice 还是 按照slice segment挨个编码
@@ -2296,6 +2313,8 @@ Void TEncGOP::xInitGOP( Int iPOCLast, Int iNumPicRcvd, Bool isField )
   //  Exception for the first frames
   if ( ( isField && (iPOCLast == 0 || iPOCLast == 1) ) || (!isField  && (iPOCLast == 0))  )
   {
+    // 帧编码：poc == 0 的帧单独为一个 gop
+    // 场编码：poc == 0 或者 poc == 1 的场单独为一个 gop
     m_iGopSize    = 1;
   }
   else

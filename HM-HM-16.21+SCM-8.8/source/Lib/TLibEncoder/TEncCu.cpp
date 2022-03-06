@@ -850,6 +850,7 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
         // do normal intra modes
         // speedup for inter frames
         // 做普通的帧内模式
+        // 什么时候做帧内：当当前帧是I帧的时候，或者P帧当前的最佳模式不是skip的时候
         Double intraCost = MAX_DOUBLE;
         Double dIntraBcCostPred = 0.0;
         if ( ( !rpcBestCU->getSlice()->getPPS()->getPpsScreenExtension().getUseIntraBlockCopy() && rpcBestCU->getSlice()->getSliceType() == I_SLICE ) ||
@@ -1018,6 +1019,8 @@ Void TEncCu::xCompressCU( TComDataCU*& rpcBestCU, TComDataCU*& rpcTempCU, const 
           rpcTempCU->initEstData( uiDepth, iQP, bIsLosslessMode );
         }
         // IBC 和 PLT
+        // 什么时候做 IBC 和 PLT
+        // 当当前帧的最佳模式不是skip的时候
         if( !rpcBestCU->isSkipped(0) ) // avoid very complex intra if it is unlikely
         {
           if (m_pcEncCfg->getUseIntraBlockCopyFastSearch())
