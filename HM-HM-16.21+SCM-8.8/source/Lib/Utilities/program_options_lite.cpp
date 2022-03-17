@@ -572,6 +572,7 @@ namespace df
      * default value */
     void setDefaults(Options& opts)
     {
+      auto test = opts.opt_list;
       for(Options::NamesPtrList::iterator it = opts.opt_list.begin(); it != opts.opt_list.end(); it++)
       {
         (*it)->opt->setDefault();

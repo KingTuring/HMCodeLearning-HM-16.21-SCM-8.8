@@ -1395,6 +1395,10 @@ Bool TAppEncCfg::parseCfg( Int argc, TChar* argv[] )
   }
   po::setDefaults(opts);
   po::ErrorReporter err;
+  // 非常之有趣
+  // frame的编码结构，被当作option加入到了 opts 结构体中
+  // 然后在 po::scanArgv 中扫描整个命令行的时候，会解析config文件
+  // 这个时候会把配置文件中的GOP结构信息写入到了 GOPList中
   const list<const TChar*>& argv_unhandled = po::scanArgv(opts, argc, (const TChar**) argv, err);
 
   for (list<const TChar*>::const_iterator it = argv_unhandled.begin(); it != argv_unhandled.end(); it++)
@@ -2889,11 +2893,15 @@ Void TAppEncCfg::xCheckParameter()
   {
     m_numReorderPics[i] = 0;
     m_maxDecPicBuffering[i] = 1 + m_useIntraBlockCopy;
+    // 不同的时域层 使用一个解码帧缓存
+    // 默认都是 一个参考帧 加 一个 IBC 的缓存帧
   }
   for(Int i=0; i<m_iGOPSize; i++)
   {
     if(m_GOPList[i].m_numRefPics+1 > m_maxDecPicBuffering[m_GOPList[i].m_temporalId])
     {
+        // 像这里的话 如果是LDP，参考帧数目是4
+        // 这里就需要把第一个时域层的参考帧数目扩充到 6
       m_maxDecPicBuffering[m_GOPList[i].m_temporalId] = m_GOPList[i].m_numRefPics + 1 + m_useIntraBlockCopy;
     }
     Int highestDecodingNumberWithLowerPOC = 0;
